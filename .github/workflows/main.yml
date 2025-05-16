@@ -38,7 +38,7 @@ jobs:
     - name: Sync Sources (partial)
       run: |
         cd twrp
-        repo sync -c --no-clone-bundle --depth=1 -j2
+        repo sync -c --no-clone-bundle -j2
 
     - name: Clone Device Sources
       run: |
