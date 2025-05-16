@@ -1,68 +1,66 @@
-name: TWRP Builder (a26xs - Android 12.1)
+name: TWRP Builder (Windows Docker)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: self-hosted
-    permissions:
-      contents: write
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 240
 
     steps:
-    - name: Checkout Repo
+    - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Install Dependencies
+    - name: Build TWRP in Docker
+      shell: powershell
       run: |
-        sudo apt-get update -y
-        sudo apt-get install -y git-core repo python3 python3-pip clang \
-          libncurses-dev libxml2-utils lzop zlib1g-dev bc flex bison ccache \
-          zip unzip imagemagick
+        docker run --rm `
+          -v "${env:GITHUB_WORKSPACE}:/workspace" `
+          -v "${env:GITHUB_WORKSPACE}/ccache:/ccache" `
+          -w /workspace `
+          -e CCACHE_DIR=/ccache `
+          -e CCACHE_COMPRESS=1 `
+          -e CCACHE_MAXSIZE=20G `
+          ghcr.io/lineageos/android:14 bash -c "
+          set -eo pipefail
 
-    - name: Install Repo Tool
+          # Verify disk space
+          df -h /workspace
+
+          repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-12.1
+          repo sync -j$(nproc) --force-sync --no-clone-bundle --no-tags
+
+          git clone https://github.com/Omargamal7/twrp_device_samsung_a26xs -b twrp-12.1 device/samsung/a26xs || true
+          git clone https://github.com/Omargamal7/twrp_device_samsung_s5e8825-common -b twrp-12.1 device/samsung/s5e8825-common || true
+          git clone https://github.com/Omargamal7/android_kernel_samsung_universal8825 -b twrp-12.1 kernel/samsung/s5e8825 || true
+          git clone https://github.com/Omargamal7/proprietary_vendor_samsung_universal8825-common -b twrp-12.1 vendor/samsung || true
+
+          export ALLOW_MISSING_DEPENDENCIES=true
+          source build/envsetup.sh
+          lunch twrp_a26xs-eng
+
+          mka recoveryimage 2>&1 | tee /workspace/build.log
+          [ -f out/target/product/a26xs/recovery.img ] || (echo '❌ Build failed - no recovery.img'; exit 1)
+        "
+
+    - name: Verify and Package Output
+      shell: bash
       run: |
-        mkdir -p ~/bin
-        curl -o ~/bin/repo https://storage.googleapis.com/git-repo-downloads/repo
-        chmod +x ~/bin/repo
-        echo "PATH=$HOME/bin:$PATH" >> $GITHUB_ENV
+        # Check file exists and has minimum size (10MB)
+        if [ $(stat -c%s "out/target/product/a26xs/recovery.img") -lt 10000000 ]; then
+          echo "❌ Error: recovery.img is too small (likely corrupt)"
+          exit 1
+        fi
+        
+        # Create archive with timestamp
+        TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+        tar -czvf "twrp_a26xs_${TIMESTAMP}.tar.gz" \
+          -C out/target/product/a26xs recovery.img \
+          build.log
 
-    - name: Init Repo (minimal)
-      run: |
-        mkdir -p twrp
-        cd twrp
-        repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-12.1
-      env:
-        PYTHONWARNINGS: "ignore"
-
-    - name: Sync Sources (partial)
-      run: |
-        cd twrp
-        repo sync -c --no-tags --no-clone-bundle --force-sync -j$(nproc || echo 2)
-
-    - name: Clone Device Sources
-      run: |
-        cd twrp
-        git clone https://github.com/Omargamal7/twrp_device_samsung_a26xs -b lineage-20 device/samsung/a26xs
-        git clone https://github.com/Omargamal7/twrp_device_samsung_s5e8825-common -b lineage-20 device/samsung/s5e8825-common
-        git clone https://github.com/Omargamal7/android_kernel_samsung_universal8825 -b lineage-20 kernel/samsung/s5e8825
-        git clone https://github.com/Omargamal7/proprietary_vendor_samsung_universal8825-common -b lineage-20 vendor/samsung
-
-    - name: Clean Repo Trash
-      run: |
-        cd twrp
-        rm -rf .repo/project-objects .repo/projects .repo/manifest.*
-
-    - name: Build Recovery
-      run: |
-        cd twrp
-        export ALLOW_MISSING_DEPENDENCIES=true
-        [ -f build/envsetup.sh ] && source build/envsetup.sh || exit 1
-        lunch twrp_a26xs-eng
-        make -j$(nproc --all || echo 2) recoveryimage
-
-    - name: Upload TWRP Image
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: twrp_a26xs.img
-        path: twrp/out/target/product/a26xs/recovery.img
+        name: twrp_build
+        path: twrp_a26xs_*.tar.gz
