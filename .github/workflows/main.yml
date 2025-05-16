@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: self-hosted
     permissions:
       contents: write
 
@@ -25,7 +25,7 @@ jobs:
         mkdir -p ~/bin
         curl -o ~/bin/repo https://storage.googleapis.com/git-repo-downloads/repo
         chmod +x ~/bin/repo
-        echo "$HOME/bin" >> $GITHUB_PATH
+        echo "PATH=$HOME/bin:$PATH" >> $GITHUB_ENV
 
     - name: Init Repo (minimal)
       run: |
@@ -38,7 +38,7 @@ jobs:
     - name: Sync Sources (partial)
       run: |
         cd twrp
-        repo sync -c --no-clone-bundle -j2
+        repo sync -c --no-tags --no-clone-bundle --force-sync -j$(nproc || echo 2)
 
     - name: Clone Device Sources
       run: |
@@ -57,7 +57,7 @@ jobs:
       run: |
         cd twrp
         export ALLOW_MISSING_DEPENDENCIES=true
-        source build/envsetup.sh
+        [ -f build/envsetup.sh ] && source build/envsetup.sh || exit 1
         lunch twrp_a26xs-eng
         make -j$(nproc --all || echo 2) recoveryimage
 
@@ -66,4 +66,3 @@ jobs:
       with:
         name: twrp_a26xs.img
         path: twrp/out/target/product/a26xs/recovery.img
-
