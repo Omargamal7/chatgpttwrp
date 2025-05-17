@@ -1,43 +1,74 @@
-name: TWRP Builder (Windows Docker)
+### **Bypassing Windows Execution Policy for Scripts**  
+If you're trying to bypass **Windows Execution Policy** (e.g., to run PowerShell scripts in Docker/GitHub Actions), here are **safe methods**:
 
-on:
-  workflow_dispatch:
+---
 
-jobs:
-  build:
-    runs-on: self-hosted
-    name: Build TWRP in Docker
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+### **1. For Local Windows Machines**  
+#### **Method 1: Run PowerShell with `-ExecutionPolicy Bypass`**  
+```powershell
+powershell -ExecutionPolicy Bypass -File "script.ps1"
+```
+- **Why?** Temporarily overrides restrictions without changing system settings.  
 
-      - name: Build TWRP in Docker
-        shell: powershell -ExecutionPolicy Bypass
-        run: |
-          docker run --rm `
-            -v "${env:GITHUB_WORKSPACE}:/workspace" `
-            -v "${env:GITHUB_WORKSPACE}/ccache:/ccache" `
-            -w /workspace `
-            -e CCACHE_DIR=/ccache `
-            -e CCACHE_COMPRESS=1 `
-            -e CCACHE_MAXSIZE=20G `
-            ghcr.io/lineageos/android:14 bash -c "
-            set -eo pipefail
+#### **Method 2: Set Policy for Current Session**  
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+- **Safe?** Only affects the current PowerShell window.  
 
-            df -h /workspace
+#### **Method 3: Unblock Scripts (If Blocked by Windows)**  
+```powershell
+Unblock-File -Path "script.ps1"
+```
 
-            repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-12.1
-            repo sync -j\$(nproc) --force-sync --no-clone-bundle --no-tags
+---
 
-            git clone https://github.com/Omargamal7/twrp_device_samsung_a26xs -b twrp-12.1 device/samsung/a26xs || true
-            git clone https://github.com/Omargamal7/twrp_device_samsung_s5e8825-common -b twrp-12.1 device/samsung/s5e8825-common || true
-            git clone https://github.com/Omargamal7/android_kernel_samsung_universal8825 -b twrp-12.1 kernel/samsung/s5e8825 || true
-            git clone https://github.com/Omargamal7/proprietary_vendor_samsung_universal8825-common -b twrp-12.1 vendor/samsung || true
+### **2. For GitHub Actions (Docker/PowerShell Steps)**  
+Your workflow already uses:  
+```yaml
+shell: powershell -ExecutionPolicy Bypass
+```
+- **This is correct** and safe in CI environments.  
 
-            export ALLOW_MISSING_DEPENDENCIES=true
-            source build/envsetup.sh
-            lunch twrp_a26xs-eng
+#### **Alternative (Cleaner for GitHub Actions):**  
+```yaml
+steps:
+  - name: Run Script
+    shell: pwsh  # Uses PowerShell Core (modern)
+    run: ./script.ps1
+```
+- **PowerShell Core (`pwsh`)** ignores execution policies by default.  
 
-            mka recoveryimage 2>&1 | tee /workspace/build.log
-            [ -f out/target/product/a26xs/recovery.img ] || (echo '❌ Build failed - no recovery.img'; exit 1)
-            "
+---
+
+### **3. For Docker Containers (Linux/Windows)**  
+If running PowerShell inside a **Windows-based Docker container**:  
+```dockerfile
+# In Dockerfile
+SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
+```
+Or pass policy flags at runtime:  
+```powershell
+docker run --rm mcr.microsoft.com/powershell pwsh -ExecutionPolicy Bypass -Command "Write-Host 'Hello'"
+```
+
+---
+
+### **⚠️ Security Notes**  
+- **Avoid `Set-ExecutionPolicy Unrestricted`** permanently.  
+- **Signed scripts** are safer than bypassing policies.  
+- **GitHub Actions** is isolated—bypassing policy there is low-risk.  
+
+---
+
+### **Your Workflow Fix**  
+Your original YAML already handles this correctly:  
+```yaml
+shell: powershell -ExecutionPolicy Bypass  # ✅ Good for CI
+```
+No changes needed unless you prefer `shell: pwsh`.  
+
+---
+
+### **Need to Bypass for Other Reasons?**  
+Let me know the context (e.g., local admin restrictions, corporate policies), and I’ll suggest alternatives! 
