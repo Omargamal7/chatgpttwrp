@@ -1,0 +1,54 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+              mka recoveryimage 2>&1 | tee /workspace/build.log
+              [ -f out/target/product/a26xs/recovery.img ] || (echo '❌ Build failed - no recovery.img'; exit 1)
+              \"
+          "
