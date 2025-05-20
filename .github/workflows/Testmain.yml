@@ -14,8 +14,12 @@ jobs:
         Get-PSDrive E | Select-Object Used,Free | Format-Table -AutoSize
         
     - name: Create Test File
+      shell: powershell  # Explicit shell declaration
       run: |
-        echo "This proves the runner works!" > E:\actions-runner\test-success.txt
+        if (-not (Test-Path "E:\actions-runner")) {
+          New-Item -ItemType Directory -Path "E:\actions-runner" -Force
+        }
+        "This proves the runner works!" | Out-File -FilePath "E:\actions-runner\test-success.txt" -Encoding utf8
         
     - name: Upload Proof
       uses: actions/upload-artifact@v4
