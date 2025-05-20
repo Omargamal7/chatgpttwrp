@@ -1,0 +1,45 @@
+name: TWRP Turbo Builder
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, windows]
+    timeout-minutes: 180
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Turbo Build
+      shell: powershell
+      run: |
+        # 1. Use Docker for heavy Linux tasks
+        docker run --rm `
+          -v "E:\twrp-build:/workspace" `
+          -v "E:\ccache:/ccache" `
+          -e CCACHE_DIR=/ccache `
+          ghcr.io/lineageos/android:14 bash -c "
+          repo init -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp -b twrp-12.1
+          repo sync -j$(nproc) --force-sync --no-tags
+          
+          git clone https://github.com/Omargamal7/twrp_device_samsung_a26xs -b twrp-12.1 device/samsung/a26xs
+          git clone https://github.com/Omargamal7/twrp_device_samsung_s5e8825-common -b twrp-12.1 device/samsung/s5e8825-common
+          source build/envsetup.sh
+          lunch twrp_a26xs-eng
+          mka -j$(($(nproc)+1)) recoveryimage
+        "
+
+    - name: Windows Post-Process
+      shell: powershell
+      run: |
+        # 2. Native Windows handling of artifacts
+        7z a -tzip E:\twrp-output\recovery_$(Get-Date -Format "yyyyMMdd_HHmm").zip `
+          E:\twrp-build\out\target\product\a26xs\recovery.img
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: twrp_a26xs
+        path: E:\twrp-output\recovery_*.zip
