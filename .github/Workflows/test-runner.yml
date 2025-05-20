@@ -1,0 +1,24 @@
+name: Test Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: [self-hosted, windows]
+    
+    steps:
+    - name: Check E: Drive Space
+      shell: powershell
+      run: |
+        Get-PSDrive E | Select-Object Used,Free | Format-Table -AutoSize
+        
+    - name: Create Test File
+      run: |
+        echo "This proves the runner works!" > E:\actions-runner\test-success.txt
+        
+    - name: Upload Proof
+      uses: actions/upload-artifact@v4
+      with:
+        name: runner-proof
+        path: E:\actions-runner\test-success.txt
